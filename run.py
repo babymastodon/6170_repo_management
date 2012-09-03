@@ -174,6 +174,11 @@ class GithubWrapper(object):
         r = self.get("/orgs/6170/repos")
         return r.json
 
+    def iterate_teams(self):
+        #unless I see otherwise, I assume that pagination is broken on this resource
+        r = self.get("/orgs/6170/teams")
+        return r.json
+
 
 @task("""
 Gets a Github API token and stores it in token.txt
@@ -276,7 +281,45 @@ def clone_repos(project_name):
     finally:
         os.chdir(cwd)
 
+@task("""
+Reads from stdin. Same input format as make_repos.
 
+Verifies that all of the repos in the provided list of
+names have been created and have the proper permissions.
+""")
+def verify_repos(project_name):
+    g = GithubWrapper.load()
+    all_repos = list(g.iterate_repos())
+    all_repos_dict = dict((x['name'],x) for x in all_repos)
+    all_teams = list(g.iterate_teams())
+    all_teams_dict = dict((x['name'],x) for x in all_teams)
+    for line in sys.stdin:
+        if not line:
+            print "Encountered empty line. Exiting"
+            return
+        print "Processing: {}".format(line)
+        try:
+            athena, github = line.split()
+        except:
+            print 'Line: "{}" must be of the form "athena_name github_name". Skipping'.format(line)
+            continue
+        repo_name = '{}_{}'.format(athena,project_name)
+        team_name = '{}_{}'.format(athena,github)
+        if not team_name in all_teams_dict:
+            print "Missing team: {}".format(team_name)
+            continue
+        team_id  = all_teams_dict[team_name]['id']
+        team = g.get("teams/{}".format(team_id)).json
+        if not team['members_count']==1:
+            print "Team should only have one member: {}".format(team_name)
+        if g.get("teams/{}/members/{}".format(team_id,github)).status_code != 204:
+            print "Missing membership: {} should be a member of team {}".format(github, team_name)
+        if not repo_name in all_repos_dict:
+            print "Missing repo: {}".format(repo_name)
+            continue
+        repo_name = all_repos_dict[repo_name]['name']
+        if g.get("teams/{}/repos/6170/{}".format(team_id, repo_name)).status_code != 204:
+            print "Team is missing repo: {} should be controlled by team {}".format(repo_name, team_name)
 
 
 if __name__ == '__main__':
