@@ -22,7 +22,7 @@ class Task(object):
             l = len(self.args)
             raise TaskFailure("{} expects {} argument{}: {}".format(
                 self.name, l, 's' if l!=1 else '',' '.join(self.args)))
-        self.f(args)
+        self.f(*args)
 
 def task(help_text=''):
     def decorator(f):
