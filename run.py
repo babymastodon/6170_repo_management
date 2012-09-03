@@ -3,6 +3,8 @@
 import sys, os
 import requests
 import inspect
+import json
+import getpass
 
 
 tasks = []
@@ -23,6 +25,7 @@ class Task(object):
             raise TaskFailure("{} expects {} argument{}: {}".format(
                 self.name, l, 's' if l!=1 else '',' '.join(self.args)))
         self.f(*args)
+        print "Success!!"
 
 def task(help_text=''):
     def decorator(f):
@@ -64,16 +67,51 @@ def run():
             return
     usage()
 
-#tries to load the auth token from token.txt
-def load_auth_token():
-    pass
-
 ##########################################
 #
 #   Task definitions
 #
 ##########################################
 
+class GithubWrapper(object):
+    def __init__(self, token):
+        self.token = token
+    @staticmethod
+    def url(s):
+        return "https://api.github.com/{}".format(s.lstrip('/'))
+    def do(self,f, path, **kwargs):
+        if 'header' not in kwargs:
+            kwargs['headers'] = {}
+        kwargs['headers']['Authorization'] = "token {}".format(self.token)
+        url = self.url(path)
+        return getattr(requests,f)(url,**kwargs)
+    def __getattr__(self,name):
+        if name in ['get','post','delete','put','head','options']:
+            def tmp(path,*args,**kwargs):
+                return self.do(name,path,**kwargs)
+            return tmp
+    def has_admin_access(self):
+        path = '/orgs/6170'
+        r = self.post(path,data=json.dumps({}))
+        return r.status_code == 200
+
+    @staticmethod
+    def load():
+        token = ''
+        try:
+            with open("token.txt") as f:
+                token = f.read().strip()
+        except:
+            pass
+        g = GithubWrapper(token)
+        if not g.has_admin_access():
+            raise TaskFailure("Github api token is either missing or invalid. "\
+                    "Please run the get_auth_token task to create a new one")
+        return g
+
+    def save(self):
+        with open("token.txt","w") as f:
+            f.write(self.token)
 
 @task("""
 Gets a Github API token and stores it in token.txt
@@ -81,7 +119,23 @@ The token will be used for all subsequent requests
 to the Github API.
 """)
 def get_auth_token():
-    print "MOO"
+    print "Enter your Github credentials"
+    username = raw_input("Username: ")
+    password = getpass.getpass("Password: ")
+    url = GithubWrapper.url('/authorizations')
+    data = {
+            "scopes":['gist','delete_repo','repo:status',
+                'repo','public_repo','user'],
+            "note":"6.170 student repo management script",
+            }
+    r = requests.post(url,data=json.dumps(data),auth=(username,password))
+    if r.status_code != 201:
+        raise TaskFailure("Your github credentials were invalid")
+    g = GithubWrapper(r.json['token'])
+    if not g.has_admin_access():
+        raise TaskFailure("Your github account does not have admin access to "\
+                "the 6.170 organization. Please make yourself an owner.")
+    g.save()
 
 
 @task("""
@@ -93,7 +147,7 @@ student's athena name. The second is the github id
 (username) beloning to the student.
 """)
 def make_repos(project_name):
-    print "MOO"
+    g = GithubWrapper.load()
 
 
 @task("""
