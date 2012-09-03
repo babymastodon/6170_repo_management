@@ -24,3 +24,6 @@ dist
 *.swn
 *.swm
 env.d/
+auth
+cloned_repos/
+token.txt
