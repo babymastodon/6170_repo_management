@@ -5,6 +5,8 @@ import requests
 import inspect
 import json
 import getpass
+import datetime
+import re
 
 
 tasks = []
@@ -78,9 +80,9 @@ class GithubWrapper(object):
         self.token = token
     @staticmethod
     def url(s):
-        return "https://api.github.com/{}".format(s.lstrip('/'))
+        return "https://api.github.com/{}".format(s.strip('/'))
     def do(self,f, path, **kwargs):
-        if 'header' not in kwargs:
+        if 'headers' not in kwargs:
             kwargs['headers'] = {}
         kwargs['headers']['Authorization'] = "token {}".format(self.token)
         url = self.url(path)
@@ -112,6 +114,66 @@ class GithubWrapper(object):
     def save(self):
         with open("token.txt","w") as f:
             f.write(self.token)
+    
+    def get_or_create_team(self,team_name):
+        all_teams = self.get("orgs/6170/teams").json
+        all_teams_dict = dict((x['name'],x['id']) for x in all_teams)
+        if team_name not in all_teams_dict:
+            data = {
+                    "name":team_name,
+                    "permission":"admin",
+                    }
+            print "Creating team with name {}".format(team_name)
+            r = self.post("/orgs/6170/teams", data=json.dumps(data))
+            if r.status_code != 201:
+                raise TaskFailure("Failed to create team")
+        else:
+            team_id = all_teams_dict[team_name]
+            print "Fetching team {}".format(team_id)
+            r = self.get("/teams/{}".format(team_id))
+            if r.status_code != 200:
+                raise TaskFailure("Failed to fetch team")
+        return r.json
+    
+    def add_user(self, athena, github):
+        team_name = "{}_{}".format(athena,github)
+        team = self.get_or_create_team(team_name)
+        print team
+        print "Addin user {} to team {}".format(github, team['id'])
+        r = self.put("/teams/{}/members/{}/".format(team['id'], github),headers={"Content-Length":'0'})
+        if r.status_code != 204:
+            raise TaskFailure("Failed to add user to team")
+        return team
+
+    def create_repo(self, repo_name, team_id):
+        data = {
+                "name":repo_name,
+                "private":True,
+                "team_id":team_id,
+                }
+        r = self.post('/orgs/6170/repos',data=json.dumps(data))
+        if r.status_code != 201:
+            raise TaskFailure("Failed to create repo: {}".format(r.content))
+        return r.json
+
+    def iterate_repos(self):
+        #unless I see otherwise, I assume that pagination is broken on this resource
+        """
+        counter = 0
+        while True:
+            r = self.get("/orgs/6170/repos",params={'page':counter, 'per_page':1})
+            repos = r.json
+            print r.url
+            print r.headers
+            if len(repos) == 0:
+                return
+            for r in repos:
+                yield r
+            counter += 1
+            """
+        r = self.get("/orgs/6170/repos")
+        return r.json
+
 
 @task("""
 Gets a Github API token and stores it in token.txt
@@ -145,10 +207,52 @@ Reads from stdin. Each line should have two tokens
 separated by whitespace. The first token is the
 student's athena name. The second is the github id
 (username) beloning to the student.
+
+The repository will be initialized with the
+a clone of git@github.com:6170/project_name.git
 """)
 def make_repos(project_name):
     g = GithubWrapper.load()
-
+    try:
+        cwd = os.getcwd()
+        os.chdir("/tmp")
+        os.system("rm -rf {}".format(project_name))
+        handout_code_repo = "git@github.com:6170/{}.git".format(project_name)
+        clone_successful = os.system("git clone {}".format(handout_code_repo)) == 0
+        if not clone_successful:
+            raise TaskFailed("Could not clone {}. Make sure that the repository exists, and that"\
+                    "your github private key is installed on this system".format(project_name))
+        os.chdir(project_name)
+        for line in sys.stdin:
+            if not line:
+                print "Encountered empty line. Exiting"
+                return
+            print "Processing: {}".format(line)
+            try:
+                athena, github = line.split()
+            except:
+                print 'Line: "{}" must be of the form "athena_name github_name". Skipping'.format(line)
+                continue
+            try:
+                print 'Adding user'
+                team = g.add_user(athena,github)
+            except Exception as e:
+                print "Failed to add user: {}".format(e)
+                continue
+            try:
+                repo_name = "{}_{}".format(athena,project_name)
+                print 'Creating repo: {}'.format(repo_name)
+                repo = g.create_repo(repo_name,team['id'])
+            except Exception as e:
+                print "Failed to create repo: {}".format(e)
+                continue
+            print "Pushing the handout code"
+            push_successful = os.system("git push {} master".format(repo['ssh_url'])) == 0
+            if not push_successful:
+                print "Failed to initialize repository with the handout code"
+    finally:
+        os.system("rm -rf {}".format(project_name))
+        os.chdir(cwd)
 
 @task("""
 Clones all repos beloning to the supplied project_name
@@ -156,9 +260,21 @@ and stores them in a new subfolder of the ./cloned_repos
 directory.
 """)
 def clone_repos(project_name):
-    print "MOO"
-
-
+    g = GithubWrapper.load()
+    dirname = os.path.join("cloned_repos","{} {}".format(
+        project_name, str(datetime.datetime.now())))
+    os.makedirs(dirname)
+    try:
+        cwd = os.getcwd()
+        os.chdir(dirname)
+        for r in g.iterate_repos():
+            if re.match(r'.+{}$'.format(project_name),r['name']):
+                print "Cloning {}".format(r['ssh_url'])
+                clone_success = os.system("git clone {}".format(r['ssh_url'])) == 0
+                if not clone_success:
+                    print "Clone Failed"
+    finally:
+        os.chdir(cwd)
 
 
 

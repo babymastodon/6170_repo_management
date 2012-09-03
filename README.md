@@ -36,6 +36,9 @@ create a repo with the name "username_project" where "username" is the athena
 name, and "project" is the project name provided on the command line. Will
 give admin privilages of the repository to that user's team
 
+Addtionally, the new repository will be initialized with a clone of the
+github.com:6170/project_name.git repository.
+
     >> python run.py clone_repos project_name
 
 Clone all repos beloning to the supplied project_name and store them
