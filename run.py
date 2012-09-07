@@ -218,6 +218,7 @@ a clone of git@github.com:6170/project_name.git
 """)
 def make_repos(project_name):
     g = GithubWrapper.load()
+    failures = []
     try:
         cwd = os.getcwd()
         os.chdir("/tmp")
@@ -228,7 +229,6 @@ def make_repos(project_name):
             raise TaskFailed("Could not clone {}. Make sure that the repository exists, and that"\
                     "your github private key is installed on this system".format(project_name))
         os.chdir(project_name)
-        failures = []
         for line in sys.stdin:
             if not line:
                 print "Encountered empty line. Exiting"
