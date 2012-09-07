@@ -142,7 +142,7 @@ class GithubWrapper(object):
         print "Addin user {} to team {}".format(github, team['id'])
         r = self.put("/teams/{}/members/{}/".format(team['id'], github),headers={"Content-Length":'0'})
         if r.status_code != 204:
-            raise TaskFailure("Failed to add user to team")
+            raise TaskFailure("Failed to add user to team, user does not exist.")
         return team
 
     def create_repo(self, repo_name, team_id):
@@ -228,11 +228,13 @@ def make_repos(project_name):
             raise TaskFailed("Could not clone {}. Make sure that the repository exists, and that"\
                     "your github private key is installed on this system".format(project_name))
         os.chdir(project_name)
+        failures = []
         for line in sys.stdin:
             if not line:
                 print "Encountered empty line. Exiting"
                 return
             print "Processing: {}".format(line)
+            failures.append(line)
             try:
                 athena, github = line.split()
             except:
@@ -255,7 +257,9 @@ def make_repos(project_name):
             push_successful = os.system("git push {} master".format(repo['ssh_url'])) == 0
             if not push_successful:
                 print "Failed to initialize repository with the handout code"
+            failures = failures[:-1]
     finally:
+        print "Failures: {}".format(failures)
         os.system("rm -rf {}".format(project_name))
         os.chdir(cwd)
 
