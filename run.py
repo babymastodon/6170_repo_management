@@ -134,15 +134,17 @@ class GithubWrapper(object):
             if r.status_code != 200:
                 raise TaskFailure("Failed to fetch team")
         return r.json
+
+    def add_user_to_team(self, github_name, team):
+        print "Addin user {} to team {}".format(github_name, team['id'])
+        r = self.put("/teams/{}/members/{}/".format(team['id'], github_name),headers={"Content-Length":'0'})
+        if r.status_code != 204:
+            raise TaskFailure("Failed to add user to team, user does not exist.")
     
     def add_user(self, athena, github):
         team_name = "{}_{}".format(athena,github)
         team = self.get_or_create_team(team_name)
-        print team
-        print "Addin user {} to team {}".format(github, team['id'])
-        r = self.put("/teams/{}/members/{}/".format(team['id'], github),headers={"Content-Length":'0'})
-        if r.status_code != 204:
-            raise TaskFailure("Failed to add user to team, user does not exist.")
+        add_user_to_team(github, team)
         return team
 
     def create_repo(self, repo_name, team_id):
@@ -325,6 +327,32 @@ def verify_repos(project_name):
         if g.get("teams/{}/repos/6170/{}".format(team_id, repo_name)).status_code != 204:
             print "Team is missing repo: {} should be controlled by team {}".format(repo_name, team_name)
 
+@task("""
+Reads from stdin. Input should be same as make_repos
+
+Adds all students to the specified github team.
+""")
+def add_users_to_team(team_name):
+    g = GithubWrapper.load()
+    failures = []
+    for line in sys.stdin:
+        if not line:
+            print "Encountered empty line. Exiting"
+            return
+        print "Processing: {}".format(line)
+        try:
+            athena, github = line.split()
+        except:
+            print 'Line: "{}" must be of the form "athena_name github_name". Skipping'.format(line)
+            continue
+        try:
+            team = g.get_or_create_team(team_name)
+            g.add_user_to_team(github, team)
+        except Exception as e:
+            print "Failed to add {} to team. {}".format(github, e)
+            failures.append(github)
+            continue
+    print "Failures: {}".format(failures)
 
 if __name__ == '__main__':
     run()
