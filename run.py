@@ -158,6 +158,12 @@ class GithubWrapper(object):
             raise TaskFailure("Failed to create repo: {}".format(r.content))
         return r.json
 
+    def add_repo_to_team(self, repo_name, team):
+        print "Adding repo {} to team {}".format(repo_name, team['id'])
+        r = self.put("/teams/{}/repos/6170/{}".format(team['id'],repo_name),headers={"Content-Length":'0'})
+        if r.status_code != 204:
+            raise TaskFailure("Failed to add repo to team: {}".format(r.content))
+
     def iterate_repos(self):
         #unless I see otherwise, I assume that pagination is broken on this resource
         """
@@ -352,6 +358,26 @@ def add_users_to_team(team_name):
             print "Failed to add {} to team. {}".format(github, e)
             failures.append(github)
             continue
+    print "Failures: {}".format(failures)
+
+@task("""
+Takes two arguments: project_name and team_name.
+
+Adds all repositories belonging to project_name to
+the team "team_name". This task is useful for
+making all repositories for a specific project public.
+""")
+def add_project_to_team(project_name, team_name):
+    g = GithubWrapper.load()
+    team = g.get_or_create_team(team_name)
+    print team
+    failures = []
+    for r in g.iterate_repos():
+        try:
+            if re.match(".+{}".format(project_name),r['name']):
+                g.add_repo_to_team(r['name'],team)
+        except:
+            failures.append(r['name'])
     print "Failures: {}".format(failures)
 
 if __name__ == '__main__':
