@@ -144,7 +144,7 @@ class GithubWrapper(object):
     def add_user(self, athena, github):
         team_name = "{}_{}".format(athena,github)
         team = self.get_or_create_team(team_name)
-        add_user_to_team(github, team)
+        self.add_user_to_team(github, team)
         return team
 
     def create_repo(self, repo_name, team_id):
@@ -378,6 +378,29 @@ def add_project_to_team(project_name, team_name):
                 g.add_repo_to_team(r['name'],team)
         except:
             failures.append(r['name'])
+    print "Failures: {}".format(failures)
+
+@task("""
+Reads input from stdin. The first token is the team
+    name. Each following token is a github name of
+    a team member.
+""")
+def make_final_project_repos():
+    g = GithubWrapper.load()
+    failures = []
+    for line in sys.stdin:
+        print "processing: ".format(line)
+        try:
+            tokens = line.split()
+            team_name = tokens[0]
+            members = tokens[1:]
+            team = g.get_or_create_team(team_name)
+            for m in members:
+                g.add_user_to_team(m, team)
+            g.create_repo(team_name, team['id'])
+        except Exception as e:
+            print e
+            failures.append(line)
     print "Failures: {}".format(failures)
 
 if __name__ == '__main__':
