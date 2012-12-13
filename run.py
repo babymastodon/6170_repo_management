@@ -163,30 +163,26 @@ class GithubWrapper(object):
         r = self.put("/teams/{}/repos/6170/{}".format(team['id'],repo_name),headers={"Content-Length":'0'})
         if r.status_code != 204:
             raise TaskFailure("Failed to add repo to team: {}".format(r.content))
-
-    def iterate_repos(self):
-        #unless I see otherwise, I assume that pagination is broken on this resource
-        """
-        counter = 0
+    
+    def iterate_endpoint(self, endpoint):
+        counter = 1
         while True:
-            r = self.get("/orgs/6170/repos",params={'page':counter, 'per_page':1})
+            r = self.get(endpoint,params={'page':counter, 'per_page':1000})
             repos = r.json
-            print r.url
-            print r.headers
             if len(repos) == 0:
                 return
             for r in repos:
                 yield r
             counter += 1
-            """
-        r = self.get("/orgs/6170/repos")
-        return r.json
+
+    def iterate_repos(self):
+        return self.iterate_endpoint("/orgs/6170/repos")
 
     def iterate_teams(self):
-        #unless I see otherwise, I assume that pagination is broken on this resource
+        #TODO: github fixed the iteration bug with the /repos endpoint,
+        # but someone should pester them about the /teams endpoint
         r = self.get("/orgs/6170/teams")
         return r.json
-
 
 @task("""
 Gets a Github API token and stores it in token.txt
