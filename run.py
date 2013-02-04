@@ -10,6 +10,8 @@ import re
 
 
 tasks = []
+#TODO: make this into a command-line argument
+ORG_NAME = '6170-sp13'
 
 class TaskFailure(Exception):
     pass
@@ -93,7 +95,7 @@ class GithubWrapper(object):
                 return self.do(name,path,**kwargs)
             return tmp
     def has_admin_access(self):
-        path = '/orgs/6170'
+        path = '/orgs/{}'.format(ORG_NAME)
         r = self.post(path,data=json.dumps({}))
         return r.status_code == 200
 
@@ -116,7 +118,7 @@ class GithubWrapper(object):
             f.write(self.token)
     
     def get_or_create_team(self,team_name):
-        all_teams = self.get("orgs/6170/teams").json
+        all_teams = self.get("orgs/{}/teams".format(ORG_NAME)).json
         all_teams_dict = dict((x['name'],x['id']) for x in all_teams)
         if team_name not in all_teams_dict:
             data = {
@@ -124,7 +126,7 @@ class GithubWrapper(object):
                     "permission":"admin",
                     }
             print "Creating team with name {}".format(team_name)
-            r = self.post("/orgs/6170/teams", data=json.dumps(data))
+            r = self.post("/orgs/{}/teams".format(ORG_NAME), data=json.dumps(data))
             if r.status_code != 201:
                 raise TaskFailure("Failed to create team")
         else:
@@ -153,14 +155,14 @@ class GithubWrapper(object):
                 "private":True,
                 "team_id":team_id,
                 }
-        r = self.post('/orgs/6170/repos',data=json.dumps(data))
+        r = self.post('/orgs/{}/repos'.format(ORG_NAME),data=json.dumps(data))
         if r.status_code != 201:
             raise TaskFailure("Failed to create repo: {}".format(r.content))
         return r.json
 
     def add_repo_to_team(self, repo_name, team):
         print "Adding repo {} to team {}".format(repo_name, team['id'])
-        r = self.put("/teams/{}/repos/6170/{}".format(team['id'],repo_name),headers={"Content-Length":'0'})
+        r = self.put("/teams/{}/repos/{}/{}".format(team['id'],ORG_NAME,repo_name),headers={"Content-Length":'0'})
         if r.status_code != 204:
             raise TaskFailure("Failed to add repo to team: {}".format(r.content))
     
@@ -176,12 +178,12 @@ class GithubWrapper(object):
             counter += 1
 
     def iterate_repos(self):
-        return self.iterate_endpoint("/orgs/6170/repos")
+        return self.iterate_endpoint("/orgs/{}/repos".format(ORG_NAME))
 
     def iterate_teams(self):
         #TODO: github fixed the iteration bug with the /repos endpoint,
         # but someone should pester them about the /teams endpoint
-        r = self.get("/orgs/6170/teams")
+        r = self.get("/orgs/{}/teams".format(ORG_NAME))
         return r.json
 
 @task("""
@@ -218,8 +220,8 @@ student's athena name. The second is the github id
 (username) beloning to the student.
 
 The repository will be initialized with the
-a clone of git@github.com:6170/project_name.git
-""")
+a clone of git@github.com:{}/project_name.git
+""".format(ORG_NAME))
 def make_repos(project_name):
     g = GithubWrapper.load()
     failures = []
@@ -227,7 +229,7 @@ def make_repos(project_name):
         cwd = os.getcwd()
         os.chdir("/tmp")
         os.system("rm -rf {}".format(project_name))
-        handout_code_repo = "git@github.com:6170/{}.git".format(project_name)
+        handout_code_repo = "git@github.com:{}/{}.git".format(ORG_NAME,project_name)
         clone_successful = os.system("git clone {}".format(handout_code_repo)) == 0
         if not clone_successful:
             raise TaskFailed("Could not clone {}. Make sure that the repository exists, and that"\
@@ -326,7 +328,7 @@ def verify_repos(project_name):
             print "Missing repo: {}".format(repo_name)
             continue
         repo_name = all_repos_dict[repo_name]['name']
-        if g.get("teams/{}/repos/6170/{}".format(team_id, repo_name)).status_code != 204:
+        if g.get("teams/{}/repos/{}/{}".format(team_id, ORG_NAME, repo_name)).status_code != 204:
             print "Team is missing repo: {} should be controlled by team {}".format(repo_name, team_name)
 
 @task("""
