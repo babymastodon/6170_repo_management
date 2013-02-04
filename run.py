@@ -118,7 +118,7 @@ class GithubWrapper(object):
             f.write(self.token)
     
     def get_or_create_team(self,team_name):
-        all_teams = self.get("orgs/{}/teams".format(ORG_NAME)).json
+        all_teams = self.get("orgs/{}/teams".format(ORG_NAME)).json()
         all_teams_dict = dict((x['name'],x['id']) for x in all_teams)
         if team_name not in all_teams_dict:
             data = {
@@ -135,7 +135,7 @@ class GithubWrapper(object):
             r = self.get("/teams/{}".format(team_id))
             if r.status_code != 200:
                 raise TaskFailure("Failed to fetch team")
-        return r.json
+        return r.json()
 
     def add_user_to_team(self, github_name, team):
         print "Addin user {} to team {}".format(github_name, team['id'])
@@ -158,7 +158,7 @@ class GithubWrapper(object):
         r = self.post('/orgs/{}/repos'.format(ORG_NAME),data=json.dumps(data))
         if r.status_code != 201:
             raise TaskFailure("Failed to create repo: {}".format(r.content))
-        return r.json
+        return r.json()
 
     def add_repo_to_team(self, repo_name, team):
         print "Adding repo {} to team {}".format(repo_name, team['id'])
@@ -170,7 +170,7 @@ class GithubWrapper(object):
         counter = 1
         while True:
             r = self.get(endpoint,params={'page':counter, 'per_page':1000})
-            repos = r.json
+            repos = r.json()
             if len(repos) == 0:
                 return
             for r in repos:
@@ -184,7 +184,7 @@ class GithubWrapper(object):
         #TODO: github fixed the iteration bug with the /repos endpoint,
         # but someone should pester them about the /teams endpoint
         r = self.get("/orgs/{}/teams".format(ORG_NAME))
-        return r.json
+        return r.json()
 
 @task("""
 Gets a Github API token and stores it in token.txt
@@ -204,7 +204,7 @@ def get_auth_token():
     r = requests.post(url,data=json.dumps(data),auth=(username,password))
     if r.status_code != 201:
         raise TaskFailure("Your github credentials were invalid")
-    g = GithubWrapper(r.json['token'])
+    g = GithubWrapper(r.json()['token'])
     if not g.has_admin_access():
         raise TaskFailure("Your github account does not have admin access to "\
                 "the 6.170 organization. Please make yourself an owner.")
@@ -319,7 +319,7 @@ def verify_repos(project_name):
             print "Missing team: {}".format(team_name)
             continue
         team_id  = all_teams_dict[team_name]['id']
-        team = g.get("teams/{}".format(team_id)).json
+        team = g.get("teams/{}".format(team_id)).json()
         if not team['members_count']==1:
             print "Team should only have one member: {}".format(team_name)
         if g.get("teams/{}/members/{}".format(team_id,github)).status_code != 204:
