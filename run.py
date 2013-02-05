@@ -235,6 +235,9 @@ def make_repos(project_name):
             raise TaskFailed("Could not clone {}. Make sure that the repository exists, and that"\
                     "your github private key is installed on this system".format(project_name))
         os.chdir(project_name)
+        #pull all of the remote branches
+        os.system("git pull --all")
+        os.system("for branch in `git branch -a | grep remotes | grep -v HEAD | grep -v master`; do git branch --track ${branch##*/} $branch; done;")
         for line in sys.stdin:
             if not line:
                 print "Encountered empty line. Exiting"
@@ -260,7 +263,7 @@ def make_repos(project_name):
                 print "Failed to create repo: {}".format(e)
                 continue
             print "Pushing the handout code"
-            push_successful = os.system("git push {} master".format(repo['ssh_url'])) == 0
+            push_successful = os.system("git push --all {}".format(repo['ssh_url'])) == 0
             if not push_successful:
                 print "Failed to initialize repository with the handout code"
             failures = failures[:-1]
