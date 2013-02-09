@@ -123,7 +123,7 @@ class GithubWrapper(object):
         if team_name not in all_teams_dict:
             data = {
                     "name":team_name,
-                    "permission":"admin",
+                    "permission":"push",
                     }
             print "Creating team with name {}".format(team_name)
             r = self.post("/orgs/{}/teams".format(ORG_NAME), data=json.dumps(data))
