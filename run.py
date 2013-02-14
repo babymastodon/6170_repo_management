@@ -138,7 +138,7 @@ class GithubWrapper(object):
         return r.json()
 
     def add_user_to_team(self, github_name, team):
-        print "Addin user {} to team {}".format(github_name, team['id'])
+        print "Adding user {} to team {}".format(github_name, team['id'])
         r = self.put("/teams/{}/members/{}/".format(team['id'], github_name),headers={"Content-Length":'0'})
         if r.status_code != 204:
             raise TaskFailure("Failed to add user to team, user does not exist.")
@@ -184,6 +184,13 @@ class GithubWrapper(object):
         #TODO: github fixed the iteration bug with the /repos endpoint,
         # but someone should pester them about the /teams endpoint
         r = self.get("/orgs/{}/teams".format(ORG_NAME))
+        return r.json()
+
+    def fetch_members(self):
+        print "Fetching all members of {}".format(ORG_NAME)
+        r = self.get("/orgs/{}/members".format(ORG_NAME),headers={"Content-Length":'0'})
+        if r.status_code != 200:
+            raise TaskFailure("Failed to fetch members list: {}".format(r.content))
         return r.json()
 
 @task("""
@@ -403,6 +410,21 @@ def make_final_project_repos():
             print e
             failures.append(line)
     print "Failures: {}".format(failures)
+
+@task("""
+Returns all members in the org, where a member is defined as someone who
+belongs to at least 1 team in the organization.
+""")
+def fetch_members():
+    g = GithubWrapper.load()
+    members = []
+    try:
+        members.extend(g.fetch_members())
+        for member in members:
+            print member['login']
+    except Exception as e:
+        print e
+    print "{} members found".format(len(members))
 
 if __name__ == '__main__':
     run()
