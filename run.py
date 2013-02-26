@@ -451,7 +451,7 @@ def fetch_team_members(team_name):
         raise TaskFailure("Team {} does not exist".format(team_name))
 
     members = []
-    members.extend(g.fetch_members())
+    members.extend(g.fetch_team_members(team))
 
     for member in members:
         print member['login']
