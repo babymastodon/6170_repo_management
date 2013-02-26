@@ -118,9 +118,8 @@ class GithubWrapper(object):
             f.write(self.token)
     
     def get_or_create_team(self,team_name):
-        all_teams = self.get("orgs/{}/teams".format(ORG_NAME)).json()
-        all_teams_dict = dict((x['name'],x['id']) for x in all_teams)
-        if team_name not in all_teams_dict:
+        team = self.get_team(team_name)
+        if team == None:
             data = {
                     "name":team_name,
                     "permission":"push",
@@ -129,6 +128,15 @@ class GithubWrapper(object):
             r = self.post("/orgs/{}/teams".format(ORG_NAME), data=json.dumps(data))
             if r.status_code != 201:
                 raise TaskFailure("Failed to create team")
+            return r.json()
+        else:
+            return team
+
+    def get_team(self, team_name):
+        all_teams = self.get("orgs/{}/teams".format(ORG_NAME)).json()
+        all_teams_dict = dict((x['name'],x['id']) for x in all_teams)
+        if team_name not in all_teams_dict:
+            return None
         else:
             team_id = all_teams_dict[team_name]
             print "Fetching team {}".format(team_id)
@@ -189,6 +197,13 @@ class GithubWrapper(object):
     def fetch_members(self):
         print "Fetching all members of {}".format(ORG_NAME)
         r = self.get("/orgs/{}/members".format(ORG_NAME),headers={"Content-Length":'0'})
+        if r.status_code != 200:
+            raise TaskFailure("Failed to fetch members list: {}".format(r.content))
+        return r.json()
+
+    def fetch_team_members(self, team):
+        print "Fetching all members of {}".format(team["name"])
+        r = self.get("/teams/{}/members".format(team["id"]),headers={"Content-Length":'0'})
         if r.status_code != 200:
             raise TaskFailure("Failed to fetch members list: {}".format(r.content))
         return r.json()
@@ -418,13 +433,31 @@ belongs to at least 1 team in the organization.
 def fetch_members():
     g = GithubWrapper.load()
     members = []
-    try:
-        members.extend(g.fetch_members())
-        for member in members:
-            print member['login']
-    except Exception as e:
-        print e
+    members.extend(g.fetch_members())
+
+    for member in members:
+        print member['login']
+
     print "{} members found".format(len(members))
+
+@task("""
+Returns a list of all members belonging to the
+given team.
+""")
+def fetch_team_members(team_name):
+    g = GithubWrapper.load()
+    team = g.get_team(team_name)
+    if team == None:
+        raise TaskFailure("Team {} does not exist".format(team_name))
+
+    members = []
+    members.extend(g.fetch_members())
+
+    for member in members:
+        print member['login']
+
+    print "{} members found".format(len(members))
+
 
 if __name__ == '__main__':
     run()
