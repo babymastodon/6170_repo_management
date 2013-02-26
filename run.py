@@ -173,6 +173,12 @@ class GithubWrapper(object):
         r = self.put("/teams/{}/repos/{}/{}".format(team['id'],ORG_NAME,repo_name),headers={"Content-Length":'0'})
         if r.status_code != 204:
             raise TaskFailure("Failed to add repo to team: {}".format(r.content))
+
+    def remove_repo_from_team(self, repo_name, team):
+        print "Removing repo {} from team {}".format(repo_name, team['id'])
+        r = self.delete("/teams/{}/repos/{}/{}".format(team['id'],ORG_NAME,repo_name),headers={"Content-Length":'0'})
+        if r.status_code != 204:
+            raise TaskFailure("Failed to add repo to team: {}".format(r.content))
     
     def iterate_endpoint(self, endpoint):
         counter = 1
@@ -381,6 +387,26 @@ def add_users_to_team(team_name):
             print "Failed to add {} to team. {}".format(github, e)
             failures.append(github)
             continue
+    print "Failures: {}".format(failures)
+
+@task("""
+Takes two arguments: project_name and team_name.
+
+Removes all repositories belonging to project_name from the team "team_name".
+This task is useful for undo-ing making all repositories for a specific project
+public.
+""")
+def remove_project_from_team(project_name, team_name):
+    g = GithubWrapper.load()
+    team = g.get_or_create_team(team_name)
+    print team
+    failures = []
+    for r in g.iterate_repos():
+        try:
+            if re.match(".+{}".format(project_name),r['name']):
+                g.remove_repo_from_team(r['name'],team)
+        except:
+            failures.append(r['name'])
     print "Failures: {}".format(failures)
 
 @task("""
