@@ -393,8 +393,8 @@ def add_users_to_team(team_name):
 Takes two arguments: project_name and team_name.
 
 Removes all repositories belonging to project_name from the team "team_name".
-This task is useful for undo-ing the task below, making all repositories for a
-specific project public.
+This task is useful for undo-ing making all repositories for a specific project
+public.
 """)
 def remove_project_from_team(project_name, team_name):
     g = GithubWrapper.load()
