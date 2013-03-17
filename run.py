@@ -8,6 +8,8 @@ import getpass
 import datetime
 import re
 
+from datetime import datetime
+
 
 tasks = []
 #TODO: make this into a command-line argument
@@ -212,6 +214,13 @@ class GithubWrapper(object):
         r = self.get("/teams/{}/members".format(team["id"]),headers={"Content-Length":'0'})
         if r.status_code != 200:
             raise TaskFailure("Failed to fetch members list: {}".format(r.content))
+        return r.json()
+
+    def fetch_repo_comments(self, repo):
+        print "Getting comments for {}".format(repo)
+        r = self.get("/repos/{}/{}/pulls/comments".format(ORG_NAME, repo))
+        if r.status_code != 200:
+            raise TaskFailure("Failed to fetch comments: {}".format(r.content))
         return r.json()
 
 @task("""
@@ -484,6 +493,40 @@ def fetch_team_members(team_name):
 
     print "{} members found".format(len(members))
 
+@task("""
+Finds all repos that contains proj_name and generates a formatted HTML file
+with all comments.
+""")
+def fetch_all_comments(proj_name):
+    OUTPUT_FILE = "comments_{}.html".format(proj_name.replace(' ',')'))
+    # The HTML template is split into intro and conclusion files so that
+    # output can be written progressively.
+    INTRO = open('html/comments_intro.html').read()
+    CONCLUSION = open('html/comments_conclusion.html').read()
+    COMMENT_TEMPLATE = open('html/comment.html').read()
+
+    print "Fetching all comments for projects containing {}".format(proj_name)
+    print "Generating output in {}".format(OUTPUT_FILE)
+
+    g = GithubWrapper.load()
+    with open(OUTPUT_FILE, "w") as f:
+        f.write(INTRO)
+        f.write("<h1>Pull request comments: {}</h1>".format(proj_name))
+        for r in filter(lambda r: proj_name in r['name'], g.iterate_repos()):
+            f.write('<h2><a href="{}">{}</a></h2>'.format(r['html_url'], r['name']))
+            comments = g.fetch_repo_comments(r['name'])
+            if comments:
+                f.write("<ul>")
+                for comment in comments:
+                    content = COMMENT_TEMPLATE.format(
+                        comment['user']['avatar_url'], comment['user']['login'],
+                        comment['user']['login'], comment['body'].encode('ascii', 'xmlcharrefreplace'),
+                        comment['_links']['html']['href'], comment['path']
+                    )
+                    f.write('<li>{}</li>'.format(content))
+                f.write("</ul>")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(CONCLUSION.format(now))
 
 if __name__ == '__main__':
     run()
