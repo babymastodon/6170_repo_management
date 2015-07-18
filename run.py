@@ -8,15 +8,19 @@ import getpass
 import datetime
 import re
 
-from datetime import datetime
-
+from ConfigParser import SafeConfigParser
 
 tasks = []
-#TODO: make this into a command-line argument
-ORG_NAME = '6170-sp13'
+
+#Sets up the organization name and the IP address of the github instance
+parser=SafeConfigParser()
+parser.read('config.ini')
+ORG_NAME=parser.get('class_setup','org_name')
+IP_ADDRESS=parser.get('server_setup','ip_address')
 
 class TaskFailure(Exception):
     pass
+
 
 #tasks cannot have kwargs
 class Task(object):
@@ -59,6 +63,7 @@ def usage():
 
 def run():
     try:
+        print "Running Task"
         task_name = sys.argv[1]
     except:
         task_name = None
@@ -79,28 +84,39 @@ def run():
 #
 ##########################################
 
+
 class GithubWrapper(object):
     def __init__(self, token):
         self.token = token
+    """
+    This method has the url for the github instance API. It must be this way, with the trailing /
+    so that it can connect and authenticate when you generate your authentication token.
+    """
     @staticmethod
     def url(s):
-        return "https://api.github.com/{}".format(s.strip('/'))
+        return "https://{}/api/v3/{}".format(IP_ADDRESS,s.strip('/')) 
+
     def do(self,f, path, **kwargs):
         if 'headers' not in kwargs:
             kwargs['headers'] = {}
         kwargs['headers']['Authorization'] = "token {}".format(self.token)
         url = self.url(path)
         return getattr(requests,f)(url,**kwargs)
+
     def __getattr__(self,name):
         if name in ['get','post','delete','put','head','options']:
             def tmp(path,*args,**kwargs):
                 return self.do(name,path,**kwargs)
             return tmp
+
     def has_admin_access(self):
         path = '/orgs/{}'.format(ORG_NAME)
         r = self.post(path,data=json.dumps({}))
         return r.status_code == 200
 
+    """
+    Attempts to load the api using the token that was generated when the user ran get_auth_token
+    """
     @staticmethod
     def load():
         token = ''
@@ -118,7 +134,11 @@ class GithubWrapper(object):
     def save(self):
         with open("token.txt","w") as f:
             f.write(self.token)
-    
+
+    """
+    This method will look for a team name that is defined by the users. If it exists, it will return
+    that team, otherwise it will create it, and then return the team.
+    """
     def get_or_create_team(self,team_name):
         team = self.get_team(team_name)
         if team == None:
@@ -134,6 +154,9 @@ class GithubWrapper(object):
         else:
             return team
 
+    """
+    This method just looks for a team that is defined by the team name, and will return it.
+    """
     def get_team(self, team_name):
         all_teams = self.get("orgs/{}/teams".format(ORG_NAME)).json()
         all_teams_dict = dict((x['name'],x['id']) for x in all_teams)
@@ -147,18 +170,41 @@ class GithubWrapper(object):
                 raise TaskFailure("Failed to fetch team")
         return r.json()
 
+    """
+    This method adds a user to a team, where both the team member as well as the user's name
+    """
     def add_user_to_team(self, github_name, team):
+        print github_name
         print "Adding user {} to team {}".format(github_name, team['id'])
+        print "Added a member"
         r = self.put("/teams/{}/members/{}/".format(team['id'], github_name),headers={"Content-Length":'0'})
         if r.status_code != 204:
             raise TaskFailure("Failed to add user to team, user does not exist.")
-    
-    def add_user(self, athena, github):
-        team_name = "{}_{}".format(athena,github)
+
+    """
+    Formats the new team name as the first(alphabet) partner_second Partner. It will then add both to the team.
+    """
+    def add_single_user(self, firstPart):
+        team_name = "{}".format(firstPart)
         team = self.get_or_create_team(team_name)
-        self.add_user_to_team(github, team)
+        self.add_user_to_team(firstPart, team)
         return team
 
+
+        
+    """
+    Formats the new team name as the first(alphabet) partner_second Partner. It will then add both to the team.
+    """
+    def add_user(self, firstPart, secondPart):
+        team_name = "{}_{}".format(firstPart,secondPart)
+        team = self.get_or_create_team(team_name)
+        self.add_user_to_team(firstPart, team)
+        self.add_user_to_team(secondPart, team)
+        return team
+
+    """
+    Creates a new repository and has it assigned to a team, denoted by team_id
+    """
     def create_repo(self, repo_name, team_id):
         data = {
                 "name":repo_name,
@@ -170,17 +216,23 @@ class GithubWrapper(object):
             raise TaskFailure("Failed to create repo: {}".format(r.content))
         return r.json()
 
+    """
+    Allows a team to push to and edit a repository
+    """
     def add_repo_to_team(self, repo_name, team):
         print "Adding repo {} to team {}".format(repo_name, team['id'])
         r = self.put("/teams/{}/repos/{}/{}".format(team['id'],ORG_NAME,repo_name),headers={"Content-Length":'0'})
         if r.status_code != 204:
             raise TaskFailure("Failed to add repo to team: {}".format(r.content))
 
+    """
+    Removes both push permission as well as edit permission for a team's repository
+    """
     def remove_repo_from_team(self, repo_name, team):
         print "Removing repo {} from team {}".format(repo_name, team['id'])
         r = self.delete("/teams/{}/repos/{}/{}".format(team['id'],ORG_NAME,repo_name),headers={"Content-Length":'0'})
         if r.status_code != 204:
-            raise TaskFailure("Failed to add repo to team: {}".format(r.content))
+            raise TaskFailure("Failed to remove repo from team: {}".format(r.content))
     
     def iterate_endpoint(self, endpoint):
         counter = 1
@@ -194,7 +246,7 @@ class GithubWrapper(object):
             counter += 1
 
     def iterate_repos(self):
-        return self.iterate_endpoint("/orgs/{}/repos".format(ORG_NAME))
+        return self.iterate_endpoint("orgs/{}/repos".format(ORG_NAME))
 
     def iterate_teams(self):
         #TODO: github fixed the iteration bug with the /repos endpoint,
@@ -216,12 +268,47 @@ class GithubWrapper(object):
             raise TaskFailure("Failed to fetch members list: {}".format(r.content))
         return r.json()
 
+    """
+    Gets all the comments from a specific repository, specifically its pull request comments
+    """
     def fetch_repo_comments(self, repo):
         print "Getting comments for {}".format(repo)
-        r = self.get("/repos/{}/{}/pulls/comments".format(ORG_NAME, repo))
+        r = self.get("/repos/{}/{}/pulls/comments".format(ORG_NAME,repo))
+       # r = self.get("/repos/{}/{}/pulls/comments".format(ORG_NAME, repo))
         if r.status_code != 200:
             raise TaskFailure("Failed to fetch comments: {}".format(r.content))
         return r.json()
+
+    """
+    Finds all the issues associated with a repository and returning them with .json file
+    """
+    def fetch_repo_issues(self, repo, issueNum):
+        print "Getting issues for {}".format(repo)
+        r = self.get("/repos/{}/{}/issues/{}".format(ORG_NAME,repo,issueNum))
+        if r.status_code != 200:
+            return
+        return r.json()
+
+    """
+    Adds an issue by adding json through the POST command with the Github API
+    """
+    def add_issue_to_repo(self, repo, issueTitle, issueBody):
+        print "Adding issues to {}".format(repo)
+        r = self.post("/repos/{}/{}/issues".format(ORG_NAME,repo),json={"title":issueTitle, "body":issueBody})
+        if r.status_code != 201:
+            raise TaskFailure("Failed to create issues: {}".format(r.content))
+
+    """
+    Deletes a repository by sending the delete signal through the Github API
+    """
+    def delete_repo(self,repo):
+        print "Deleting Repository {}".format(repo)
+        r = self.delete("/repos/{}/{}".format(ORG_NAME,repo))
+        if r.status_code != 204:
+            raise TaskFailure("Failed to destroy repository: {}".format(r.content))
+                        
+        
+    
 
 @task("""
 Gets a Github API token and stores it in token.txt
@@ -229,6 +316,7 @@ The token will be used for all subsequent requests
 to the Github API.
 """)
 def get_auth_token():
+    print ORG_NAME
     print "Enter your Github credentials"
     username = raw_input("Username: ")
     password = getpass.getpass("Password: ")
@@ -236,7 +324,7 @@ def get_auth_token():
     data = {
             "scopes":['gist','delete_repo','repo:status',
                 'repo','public_repo','user'],
-            "note":"6.170 student repo management script",
+            "note":"Github education repo management token",
             }
     r = requests.post(url,data=json.dumps(data),auth=(username,password))
     if r.status_code != 201:
@@ -244,7 +332,7 @@ def get_auth_token():
     g = GithubWrapper(r.json()['token'])
     if not g.has_admin_access():
         raise TaskFailure("Your github account does not have admin access to "\
-                "the 6.170 organization. Please make yourself an owner.")
+                "the organization. Please make yourself an owner.")
     g.save()
 
 
@@ -257,7 +345,7 @@ student's athena name. The second is the github id
 (username) beloning to the student.
 
 The repository will be initialized with the
-a clone of git@github.com:{}/project_name.git
+a clone of git@134.173.43.95.com:{}/project_name.git
 """.format(ORG_NAME))
 def make_repos(project_name):
     g = GithubWrapper.load()
@@ -266,7 +354,7 @@ def make_repos(project_name):
         cwd = os.getcwd()
         os.chdir("/tmp")
         os.system("rm -rf {}".format(project_name))
-        handout_code_repo = "git@github.com:{}/{}.git".format(ORG_NAME,project_name)
+        handout_code_repo = "git@{}:{}/{}.git".format(IP_ADDRESS,ORG_NAME,project_name)
         clone_successful = os.system("git clone {}".format(handout_code_repo)) == 0
         if not clone_successful:
             raise TaskFailed("Could not clone {}. Make sure that the repository exists, and that"\
@@ -282,20 +370,35 @@ def make_repos(project_name):
             print "Processing: {}".format(line)
             failures.append(line)
             try:
-                athena, github = line.split()
+                usernames = line.split()
+                usernames.sort()
+                if(len(usernames) == 1):
+                   firstPart = usernames[0]
+                   secondPart = ""
+                else:
+                   firstPart = usernames[0]
+                   secondPart = usernames[1]
             except:
-                print 'Line: "{}" must be of the form "athena_name github_name". Skipping'.format(line)
+                print 'Line: "{}" must be of the form "first_partner second_partner". Skipping'.format(line)
                 continue
             try:
                 print 'Adding user'
-                team = g.add_user(athena,github)
+                if (secondPart == ""):  #Added singleton teams
+                   team=g.add_single_user(firstPart)
+                else:
+                   team = g.add_user(firstPart,secondPart)
             except Exception as e:
                 print "Failed to add user: {}".format(e)
                 continue
             try:
-                repo_name = "{}_{}".format(athena,project_name)
-                print 'Creating repo: {}'.format(repo_name)
-                repo = g.create_repo(repo_name,team['id'])
+                if (secondPart == ""):  #Adding singleton Repos
+                   repo_name = "{}_{}".format(project_name,firstPart)
+                   print 'Creating repo: {}'.format(repo_name)
+                   repo = g.create_repo(repo_name,team['id'])
+                else:
+                   repo_name = "{}_{}_{}".format(project_name,firstPart,secondPart)
+                   print 'Creating repo: {}'.format(repo_name)
+                   repo = g.create_repo(repo_name,team['id'])
             except Exception as e:
                 print "Failed to create repo: {}".format(e)
                 continue
@@ -323,7 +426,7 @@ def clone_repos(project_name):
         cwd = os.getcwd()
         os.chdir(dirname)
         for r in g.iterate_repos():
-            if re.match(r'.+{}$'.format(project_name),r['name']):
+            if re.match(r'{}+.*$'.format(project_name),r['name']):
                 print "Cloning {}".format(r['ssh_url'])
                 clone_success = os.system("git clone {}".format(r['ssh_url'])) == 0
                 if not clone_success:
@@ -349,21 +452,36 @@ def verify_repos(project_name):
             return
         print "Processing: {}".format(line)
         try:
-            athena, github = line.split()
+            usernames = line.split()
+            usernames.sort()
+            if(len(usernames) == 1):
+                firstPart = usernames[0]
+                secondPart = ""
+            else:
+                firstPart = usernames[0]
+                secondPart = usernames[1]
         except:
-            print 'Line: "{}" must be of the form "athena_name github_name". Skipping'.format(line)
+            print 'Line: "{}" must be of the form "firstPart secondPart". Skipping'.format(line)
             continue
-        repo_name = '{}_{}'.format(athena,project_name)
-        team_name = '{}_{}'.format(athena,github)
+        
+        if (secondPart == ""):  #Adding singleton Repos
+            repo_name = "{}_{}".format(project_name,firstPart)
+            print 'Verifying repo: {}'.format(repo_name)
+            team_name = "{}".format(firstPart)
+        else:
+            repo_name = "{}_{}_{}".format(project_name,firstPart,secondPart)
+            print 'Verifying repo: {}'.format(repo_name)
+            team_name = '{}_{}'.format(firstPart,secondPart)
+            
         if not team_name in all_teams_dict:
             print "Missing team: {}".format(team_name)
             continue
         team_id  = all_teams_dict[team_name]['id']
         team = g.get("teams/{}".format(team_id)).json()
-        if not team['members_count']==1:
+        if not team['members_count']==1 | 2:
             print "Team should only have one member: {}".format(team_name)
-        if g.get("teams/{}/members/{}".format(team_id,github)).status_code != 204:
-            print "Missing membership: {} should be a member of team {}".format(github, team_name)
+        if g.get("teams/{}/members/{}".format(team_id,secondPart)).status_code != 204:
+            print "Missing membership: {} should be a member of team {}".format(secondPart, team_name)
         if not repo_name in all_repos_dict:
             print "Missing repo: {}".format(repo_name)
             continue
@@ -385,16 +503,25 @@ def add_users_to_team(team_name):
             return
         print "Processing: {}".format(line)
         try:
-            athena, github = line.split()
+            usernames = line.split()
+            print "Split"
+            usernames.sort()
+            print usernames
+            if(len(usernames) == 1):
+                firstPart = usernames[0]
+                secondPart = ""
+            else:
+                firstPart = usernames[0]
+                secondPart = usernames[1]
         except:
-            print 'Line: "{}" must be of the form "athena_name github_name". Skipping'.format(line)
+            print 'Line: "{}" must be of the form "first_partner second_partner". Skipping'.format(line)
             continue
         try:
             team = g.get_or_create_team(team_name)
-            g.add_user_to_team(github, team)
+            g.add_user_to_team(secondPart, team)
         except Exception as e:
-            print "Failed to add {} to team. {}".format(github, e)
-            failures.append(github)
+            print "Failed to add {} to team. {}".format(secondPart, e)
+            failures.append(secondPart)
             continue
     print "Failures: {}".format(failures)
 
@@ -412,7 +539,7 @@ def remove_project_from_team(project_name, team_name):
     failures = []
     for r in g.iterate_repos():
         try:
-            if re.match(".+{}".format(project_name),r['name']):
+            if re.match("{}+.*".format(project_name),r['name']):
                 g.remove_repo_from_team(r['name'],team)
         except:
             failures.append(r['name'])
@@ -432,7 +559,7 @@ def add_project_to_team(project_name, team_name):
     failures = []
     for r in g.iterate_repos():
         try:
-            if re.match(".+{}".format(project_name),r['name']):
+            if re.match("{}+.*".format(project_name),r['name']):
                 g.add_repo_to_team(r['name'],team)
         except:
             failures.append(r['name'])
@@ -493,9 +620,10 @@ def fetch_team_members(team_name):
 
     print "{} members found".format(len(members))
 
+    
 @task("""
 Finds all repos that contains proj_name and generates a formatted HTML file
-with all comments.
+with all comments. Provides a link to pull request comments 
 """)
 def fetch_all_comments(proj_name):
     OUTPUT_FILE = "comments_{}.html".format(proj_name.replace(' ',')'))
@@ -525,8 +653,98 @@ def fetch_all_comments(proj_name):
                     )
                     f.write('<li>{}</li>'.format(content))
                 f.write("</ul>")
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.datetime.now()
+        #now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") - probably outdated
         f.write(CONCLUSION.format(now))
 
+
+@task("""
+Finds all repositories that match the project name specified and will output their 
+issues in a json file. There will be 1 .json file per issue, and there can be a maximum
+of 15 issues.
+""")
+def fetch_all_issues(proj_name):
+    #loads the authentication token
+    g = GithubWrapper.load()
+    for i in range(1,15):
+        OUTPUT_FILE="issues_{}_{}.json".format(proj_name.replace(' ','}'),i) #Can fetch a maximum of 15 issues
+        with open(OUTPUT_FILE, "w") as f:
+            #gets the .json from the repository
+            content = g.fetch_repo_issues(proj_name, i)
+            #writes that json to a file
+            if (content == ''):
+                return
+            else:
+                f.write("{}".format(content))
+
+
+@task("""
+Adds the new issues to the cloned repositories by taking the json file and pulling the 
+title of the issue out of it and creating a new issue around it. Input is the name of 
+the base repository that everything is cloned from. This can add a maximum of 15 issues.
+""")
+def create_new_issues(proj_name):
+    g = GithubWrapper.load()
+    
+    for r in g.iterate_repos():
+        if re.match(r'{}+_.*$'.format(proj_name),r['name']):
+            
+            for i in range(1,15):                                      #Can add a maximum of 15 issues
+                cutoff = i+1
+                if not "issues_{}_{}".format(proj_name,cutoff):
+                    print "Completed Copying issues"
+                    break
+                
+                jsonDump = open("issues_{}_{}.json".format(proj_name,i)).read()
+                if(jsonDump == "None"):
+                    print "Completed Copying Issues"
+                    break
+                paramDump = re.findall(".'(.*?)'",jsonDump)           #Strips away all identifiers
+
+                realTitle=paramDump[6]                                #With no labels or closings, title is the 7th elt
+                realBody=paramDump[1]                                 #With no labels or closings, the body is the 1st elt
+                                
+                newProj = r['name']
+                g.add_issue_to_repo(newProj,realTitle,realBody)
+    
+
+
+@task("""
+Will delete all auto-generated repositories and teams, making it easier to test and debug. Input
+will be the base repository, which is not deleted, although any repositories that were cloned from
+it will be.
+""")
+def delete_repos(baseProj):
+    g = GithubWrapper.load()
+
+    for r in g.iterate_repos():
+        if re.match(r'{}+_.*$'.format(baseProj),r['name']):
+            g.delete_repo(r['name'])
+
+    
+            
+    
+@task("""
+Will automatically assign the ORG_NAME and IP_NAME variables so that they will not
+have to be hardcoded in. This will be read in from a config file or on stdin. This 
+function is deprected, and will not influence anything in the global scope.
+""")
+def configuration():
+    failures = []
+    for line in sys.stdin:
+        if not line:
+            print "Encountered Empty Line, exiting"
+            return
+        else:
+            settingUp = line.split()
+            ORG_NAME = settingUp[0]
+            IP_ADDRESS = settingUp[1]
+            print ORG_NAME
+            print IP_ADDRESS
+    print failures
+
+        
 if __name__ == '__main__':
     run()
+
+
