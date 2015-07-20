@@ -284,7 +284,7 @@ class GithubWrapper(object):
         return r.json()
 
     """
-    Finds all the issues associated with a repository and returning them with .json file
+    Finds all the issues associated with a repository and returns them in .json format
     """
     def fetch_repo_issues(self, repo, issueNum):
         print "Getting issues for {}".format(repo)
