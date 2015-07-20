@@ -1,7 +1,7 @@
 6.170 Repo Management
 =====================
 
-A set of tools to manage a Github enterprise instance that is setup for a class.
+A set of tools to manage a Github or Github enterprise instance that is setup for a class.
 
 Usage
 -----
@@ -16,7 +16,7 @@ To use the scripts, first clone the repository to a local folder on your compute
 
 ###Configuration
 
-To make sure that everything is configured correctly, first open the config.ini file, and fill in your github organization and your github enterprise IP.
+To make sure that everything is configured correctly, first open the config.ini file, and fill in your github organization and your github enterprise IP. If you do not run a Github Enterprise instance, make sure that the enterprise field is false, and you can ignore the IP_ADDRESS field.
 
 ###Generating your Authentication Token
 
