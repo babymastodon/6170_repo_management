@@ -349,7 +349,7 @@ student's athena name. The second is the github id
 (username) beloning to the student.
 
 The repository will be initialized with the
-a clone of git@134.173.43.95.com:{}/project_name.git
+a clone of git@YourHostName.com:{}/project_name.git
 """.format(ORG_NAME))
 def make_repos(project_name):
     g = GithubWrapper.load()
