@@ -17,6 +17,7 @@ parser=SafeConfigParser()
 parser.read('config.ini')
 ORG_NAME=parser.get('class_setup','org_name')
 IP_ADDRESS=parser.get('server_setup','ip_address')
+ENTERPRISE=parser.get('server_setup','enterprise')
 
 class TaskFailure(Exception):
     pass
@@ -94,7 +95,10 @@ class GithubWrapper(object):
     """
     @staticmethod
     def url(s):
-        return "https://{}/api/v3/{}".format(IP_ADDRESS,s.strip('/')) 
+        if(ENTERPRISE == False):
+            return "https://api.github.com/{}".format(s.strip('/'))
+        else:
+            return "https://{}/api/v3/{}".format(IP_ADDRESS,s.strip('/')) 
 
     def do(self,f, path, **kwargs):
         if 'headers' not in kwargs:
@@ -354,7 +358,10 @@ def make_repos(project_name):
         cwd = os.getcwd()
         os.chdir("/tmp")
         os.system("rm -rf {}".format(project_name))
-        handout_code_repo = "git@{}:{}/{}.git".format(IP_ADDRESS,ORG_NAME,project_name)
+        if (ENTERPRISE == False):
+            handout_code_repo = "git@github.com:{}/{}.git".format(ORG_NAME,project_name)
+        else:
+            handout_code_repo = "git@{}:{}/{}.git".format(IP_ADDRESS,ORG_NAME,project_name)
         clone_successful = os.system("git clone {}".format(handout_code_repo)) == 0
         if not clone_successful:
             raise TaskFailed("Could not clone {}. Make sure that the repository exists, and that"\
