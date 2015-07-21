@@ -95,7 +95,8 @@ class GithubWrapper(object):
     """
     @staticmethod
     def url(s):
-        if(ENTERPRISE == False):
+        if(ENTERPRISE == "False"):
+            print "No Enterprise"
             return "https://api.github.com/{}".format(s.strip('/'))
         else:
             return "https://{}/api/v3/{}".format(IP_ADDRESS,s.strip('/')) 
@@ -362,7 +363,7 @@ def make_repos(project_name):
         cwd = os.getcwd()
         os.chdir("/tmp")
         os.system("rm -rf {}".format(project_name))
-        if (ENTERPRISE == False):
+        if (ENTERPRISE == "False"):
             handout_code_repo = "git@github.com:{}/{}.git".format(ORG_NAME,project_name)
         else:
             handout_code_repo = "git@{}:{}/{}.git".format(IP_ADDRESS,ORG_NAME,project_name)
