@@ -291,7 +291,11 @@ class GithubWrapper(object):
         r = self.get("/repos/{}/{}/issues/{}".format(ORG_NAME,repo,issueNum))
         if r.status_code != 200:
             return
-        return r.json()
+        content = r.json()
+        elements = []
+        elements.append(content[u'title'])
+        elements.append(content[u'body'])
+        return elements
 
     """
     Adds an issue by adding json through the POST command with the Github API
@@ -702,17 +706,19 @@ def create_new_issues(proj_name):
                     print "Completed Copying issues"
                     break
                 
-                jsonDump = open("issues_{}_{}.json".format(proj_name,i)).read()
-                if(jsonDump == "None"):
+                eltList = open("issues_{}_{}.json".format(proj_name,i)).read()
+                if(eltList == "None"):
                     print "Completed Copying Issues"
                     break
-                paramDump = re.findall(".'(.*?)'",jsonDump)           #Strips away all identifiers
-
-                realTitle=paramDump[6]                                #With no labels or closings, title is the 7th elt
-                realBody=paramDump[1]                                 #With no labels or closings, the body is the 1st elt
-                                
+                
+                for line in eltList:
+                    #parses out the title and the body from the list passed by the above methods
+                    elements = re.findall(".'(.*?)'",eltList)
+                    title=elements[0]
+                    body=elements[1]
+                
                 newProj = r['name']
-                g.add_issue_to_repo(newProj,realTitle,realBody)
+                g.add_issue_to_repo(newProj,title, body)
     
 
 
