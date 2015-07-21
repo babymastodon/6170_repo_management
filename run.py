@@ -284,7 +284,7 @@ class GithubWrapper(object):
         return r.json()
 
     """
-    Finds all the issues associated with a repository and returns them in .json format
+    Finds all the issues associated with a repository and returns them as a list
     """
     def fetch_repo_issues(self, repo, issueNum):
         print "Getting issues for {}".format(repo)
@@ -293,8 +293,8 @@ class GithubWrapper(object):
             return
         content = r.json()
         elements = []
-        elements.append(content[u'title'])
-        elements.append(content[u'body'])
+        elements.append(content[u'title'])  # append the title of the issue to the list
+        elements.append(content[u'body'])   # append the body of the issue to the list
         return elements
 
     """
@@ -690,7 +690,7 @@ def fetch_all_issues(proj_name):
 
 
 @task("""
-Adds the new issues to the cloned repositories by taking the json file and pulling the 
+Adds the new issues to the cloned repositories by taking the element list and pulling the 
 title of the issue out of it and creating a new issue around it. Input is the name of 
 the base repository that everything is cloned from. This can add a maximum of 15 issues.
 """)
