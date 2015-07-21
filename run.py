@@ -96,7 +96,6 @@ class GithubWrapper(object):
     @staticmethod
     def url(s):
         if(ENTERPRISE == "False"):
-            print "No Enterprise"
             return "https://api.github.com/{}".format(s.strip('/'))
         else:
             return "https://{}/api/v3/{}".format(IP_ADDRESS,s.strip('/')) 
@@ -363,10 +362,8 @@ def make_repos(project_name):
         cwd = os.getcwd()
         os.chdir("/tmp")
         os.system("rm -rf {}".format(project_name))
-        if (ENTERPRISE == "False"):
-            handout_code_repo = "git@github.com:{}/{}.git".format(ORG_NAME,project_name)
-        else:
-            handout_code_repo = "git@{}:{}/{}.git".format(IP_ADDRESS,ORG_NAME,project_name)
+        handout_code_repo = "https://{}/{}/{}.git".format(IP_ADDRESS,ORG_NAME,project_name)
+        print handout_code_repo
         clone_successful = os.system("git clone {}".format(handout_code_repo)) == 0
         if not clone_successful:
             raise TaskFailed("Could not clone {}. Make sure that the repository exists, and that"\
@@ -415,7 +412,7 @@ def make_repos(project_name):
                 print "Failed to create repo: {}".format(e)
                 continue
             print "Pushing the handout code"
-            push_successful = os.system("git push --all {}".format(repo['ssh_url'])) == 0
+            push_successful = os.system("git push --all {}".format(repo['clone_url'])) == 0
             if not push_successful:
                 print "Failed to initialize repository with the handout code"
             failures = failures[:-1]
